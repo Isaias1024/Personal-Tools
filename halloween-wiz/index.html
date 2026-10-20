@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel Halloween</title>
+<style>
+  :root {
+    --bg: #0d0a12; --panel: #17121f; --panel2: #211a2c; --line: #33284a;
+    --text: #efe8f7; --muted: #9a8fb0; --orange: #ff7a1a; --purple: #9b4dff; --green: #3dff6a; --red: #ff3b3b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line);
+           background: linear-gradient(90deg, #1c0f05, #150c22); position: sticky; top: 0; z-index: 5; }
+  header h1 { margin: 0; font-size: 20px; flex: 1; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  h2 { margin: 0 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+           border-radius: 10px; padding: 9px 12px; cursor: pointer; }
+  button:hover { border-color: var(--purple); }
+  button:active { transform: scale(.97); }
+  button.primary { background: var(--orange); color: #1a0d00; border-color: var(--orange); font-weight: 600; }
+  button.danger { border-color: #5a2424; color: #ffb3b3; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .grid button { text-align: left; display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .sw { width: 22px; height: 22px; border-radius: 50%; flex: none; border: 1px solid #0006; }
+  .bulbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .bulb { text-align: left; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 10px; }
+  .bulb.sel { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange) inset; background: #2a1a10; }
+  .bulb .dot { grid-row: span 3; width: 34px; height: 34px; border-radius: 50%; align-self: center; border: 2px solid #0008; }
+  .bulb small { color: var(--muted); }
+  .bulb .run { color: var(--green); font-size: 12px; }
+  .off { opacity: .45; }
+  label.sl { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
+  input[type=range] { flex: 1; accent-color: var(--orange); }
+  input, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px; }
+  .seqwrap { display: grid; grid-template-columns: 240px 1fr; gap: 14px; }
+  @media (max-width: 760px) { .seqwrap { grid-template-columns: 1fr; } }
+  .seqlist button { width: 100%; text-align: left; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .seqlist button.cur { border-color: var(--orange); }
+  .steps { display: grid; gap: 6px; margin: 10px 0; }
+  .step { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 6px; align-items: center;
+          background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+  .step .n { color: var(--muted); text-align: center; }
+  .step .what { display: flex; gap: 6px; min-width: 0; }
+  .step select { flex: 1; min-width: 0; }
+  .step .dur { display: flex; align-items: center; gap: 4px; }
+  .step .dur input { width: 64px; }
+  .step .tools button { padding: 6px 9px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #2b1d3d; border: 1px solid var(--purple);
+           padding: 10px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+  #toast.show { opacity: 1; }
+  @media (max-width: 520px) {
+    main { padding: 10px; }
+    .step { grid-template-columns: 22px 1fr; }
+    .step .dur, .step .tools { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎃 Panel Halloween</h1>
+  <span id="conn" class="muted">conectando…</span>
+</header>
+<main>
+  <section>
+    <h2>1 · ¿A qué focos?</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button data-quick="sala">Sala (Focos 1 y 2)</button>
+      <button data-quick="otro">Otro cuarto (Foco 3)</button>
+      <button data-quick="all">Todos</button>
+      <button data-quick="none">Ninguno</button>
+    </div>
+    <div class="bulbs" id="bulbs"></div>
+    <div class="row" style="margin-top:12px">
+      <label class="sl">☀️ Brillo <input type="range" id="bright" min="10" max="100" value="100"><span id="brightV">100%</span></label>
+      <label class="sl">⚡ Velocidad <input type="range" id="speed" min="0.3" max="2.5" step="0.1" value="1"><span id="speedV">1.0x</span></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="stopBtn">⏹ Detener efecto/secuencia</button>
+      <button class="danger" id="offBtn">⏻ Apagar</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Escenas fijas</h2>
+    <div class="grid" id="scenes"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="color" id="custom" value="#ff4500">
+      <button id="customBtn">Aplicar color personalizado</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Efectos animados</h2>
+    <div class="grid" id="effects"></div>
+    <p class="muted" style="margin:10px 0 0">Los efectos corren en la PC: deja la ventana del servidor abierta.</p>
+  </section>
+
+  <section>
+    <h2>4 · Escenas combinadas</h2>
+    <div class="grid combos" id="combos"></div>
+    <p class="muted" id="comboDesc" style="margin:10px 0 0">Cada foco hace un papel distinto dentro de la misma escena.</p>
+    <p class="muted" style="margin:6px 0 0">Los papeles se reparten en orden entre los focos que elijas (1.º, 2.º, 3.º). Se ven mejor con 2 o 3 focos.</p>
+  </section>
+
+  <section>
+    <h2>5 · Escenas nativas WiZ</h2>
+    <div class="grid" id="wiz"></div>
+    <p class="muted" style="margin:10px 0 0">Corren dentro del foco. La velocidad sí aplica.</p>
+  </section>
+
+  <section>
+    <h2>6 · Secuencias</h2>
+    <div class="seqwrap">
+      <div>
+        <div class="seqlist" id="seqlist"></div>
+        <button id="newSeq" style="width:100%">＋ Nueva secuencia</button>
+      </div>
+      <div>
+        <div class="row">
+          <input id="seqName" placeholder="Nombre" style="flex:1;min-width:160px">
+          <label class="row" style="gap:4px"><input type="checkbox" id="seqLoop"> Repetir</label>
+        </div>
+        <div class="steps" id="steps"></div>
+        <div class="row">
+          <button id="addStep">＋ Agregar paso</button>
+          <span class="muted" id="total"></span>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" id="runSeq">▶ Correr en focos elegidos</button>
+          <button id="saveSeq">💾 Guardar</button>
+          <button class="danger" id="delSeq">Borrar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let CAT, SEQS = [], cur = 0, BULBSTATE = [];
+const sel = new Set();
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || 'error');
+  return j;
+}
+const hex = c => '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+const params = () => ({ targets: [...sel], bright: +$('#bright').value, speed: +$('#speed').value });
+
+async function send(path, extra) {
+  if (!sel.size) return toast('Elige al menos un foco');
+  try { await api(path, { ...params(), ...extra }); setTimeout(refresh, 300); return true; }
+  catch (e) { toast('⚠ ' + e.message); }
+}
+const apply = (action, label) => send('/api/apply', { action }).then(ok => ok && toast('✓ ' + label));
+
+// ---------- focos
+function renderBulbs() {
+  $('#bulbs').innerHTML = '';
+  CAT.bulbs.forEach((b, i) => {
+    const s = BULBSTATE[i] || {}, p = s.pilot;
+    let color = '#222';
+    if (p && p.state) color = p.r !== undefined ? hex([p.r, p.g, p.b]) : p.sceneId ? 'conic-gradient(#ff7a1a,#9b4dff,#3dff6a,#ff7a1a)' : '#ffd9a0';
+    const el = document.createElement('button');
+    el.className = 'bulb' + (sel.has(b.ip) ? ' sel' : '') + (s.online === false ? ' off' : '');
+    el.innerHTML = `<span class="dot" style="background:${color}"></span>
+      <b>${b.name} · ${b.room}</b>
+      <small>${b.ip} · ${s.online === false ? 'sin respuesta' : p ? (p.state ? 'encendido ' + (p.dimming || '') + '%' : 'apagado') : '…'}</small>
+      <span class="run">${s.running ? '▶ ' + s.running : ''}</span>`;
+    el.onclick = () => { sel.has(b.ip) ? sel.delete(b.ip) : sel.add(b.ip); renderBulbs(); };
+    $('#bulbs').appendChild(el);
+  });
+}
+async function refresh() {
+  try { BULBSTATE = await api('/api/status'); $('#conn').textContent = '● conectado'; $('#conn').style.color = 'var(--green)'; }
+  catch { $('#conn').textContent = '● servidor apagado'; $('#conn').style.color = 'var(--red)'; }
+  renderBulbs();
+}
+document.querySelectorAll('[data-quick]').forEach(b => b.onclick = () => {
+  sel.clear();
+  const q = b.dataset.quick;
+  CAT.bulbs.forEach(x => {
+    if (q === 'all' || (q === 'sala' && x.room === 'Sala fiesta') || (q === 'otro' && x.room === 'Otro cuarto')) sel.add(x.ip);
+  });
+  renderBulbs();
+});
+
+// ---------- botones de escenas
+function sceneSwatch(s) {
+  if (s.off) return '#000';
+  if (s.temp) return '#ffd9a0';
+  const c = s.colors.map(hex);
+  return c.length === 1 ? c[0] : `conic-gradient(${c.concat(c[0]).join(',')})`;
+}
+const FX_ICON = { relampago: '⚡', vela: '🕯️', latido: '❤️', aura: '👻', toxico: '☣️', poltergeist: '🌀', maldito: '🌈', susto: '😱', estrobo: '💥' };
+const COMBO_ICON = { tormenta: '⛈️', caldero: '🧙', fantasma: '👻', monstruo: '👹', calabaza: '🎃', ronda: '🌀' };
+function renderButtons() {
+  for (const s of CAT.scenes) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="sw" style="background:${sceneSwatch(s)}"></span>${s.name}`;
+    b.onclick = () => apply({ kind: 'scene', id: s.id }, s.name);
+    $('#scenes').appendChild(b);
+  }
+  for (const e of CAT.effects) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span style="font-size:20px">${FX_ICON[e.id] || '✨'}</span>${e.name}`;
+    b.onclick = () => apply({ kind: 'effect', id: e.id }, e.name);
+    $('#effects').appendChild(b);
+  }
+  for (const c of CAT.combos) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span style="font-size:20px">${COMBO_ICON[c.id] || '🎭'}</span>${c.name}`;
+    b.onclick = () => apply({ kind: 'combo', id: c.id }, c.name);
+    b.onmouseenter = b.onfocus = () => $('#comboDesc').textContent = c.desc;
+    $('#combos').appendChild(b);
+  }
+  for (const w of CAT.wiz) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span style="font-size:20px">🔮</span>${w.name}`;
+    b.onclick = () => apply({ kind: 'wiz', id: w.id }, w.name);
+    $('#wiz').appendChild(b);
+  }
+}
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+$('#customBtn').onclick = () => apply({ kind: 'color', color: hexToRgb($('#custom').value) }, 'Color personalizado');
+$('#stopBtn').onclick = () => send('/api/stop', {}).then(ok => ok && toast('Detenido (quedan en el último color)'));
+$('#offBtn').onclick = () => apply({ kind: 'scene', id: 'apagar' }, 'Apagado');
+$('#bright').oninput = e => $('#brightV').textContent = e.target.value + '%';
+$('#speed').oninput = e => $('#speedV').textContent = (+e.target.value).toFixed(1) + 'x';
+
+// ---------- secuencias
+function actionOptions(st) {
+  const v = st.kind + ':' + (st.kind === 'color' ? 'custom' : st.id);
+  const g = (label, items, kind) => `<optgroup label="${label}">` + items.map(i =>
+    `<option value="${kind}:${i.id}" ${v === kind + ':' + i.id ? 'selected' : ''}>${i.name}</option>`).join('') + '</optgroup>';
+  return g('Escenas fijas', CAT.scenes, 'scene') + g('Efectos animados', CAT.effects, 'effect')
+    + g('Escenas combinadas', CAT.combos, 'combo') + g('WiZ nativas', CAT.wiz, 'wiz')
+    + `<optgroup label="Otro"><option value="color:custom" ${v === 'color:custom' ? 'selected' : ''}>Color personalizado</option></optgroup>`;
+}
+const fmt = s => { s = Math.round(s); const m = Math.floor(s / 60); return m ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
+
+function renderSeqList() {
+  $('#seqlist').innerHTML = '';
+  SEQS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = i === cur ? 'cur' : '';
+    b.innerHTML = `<span>${s.name || 'Sin nombre'}</span><span class="muted">${s.steps.length} pasos</span>`;
+    b.onclick = () => { cur = i; renderSeqList(); renderEditor(); };
+    $('#seqlist').appendChild(b);
+  });
+}
+function renderEditor() {
+  const s = SEQS[cur];
+  if (!s) { SEQS.push({ name: 'Nueva secuencia', loop: true, steps: [] }); cur = SEQS.length - 1; return renderSeqList(), renderEditor(); }
+  $('#seqName').value = s.name; $('#seqLoop').checked = !!s.loop;
+  $('#steps').innerHTML = '';
+  s.steps.forEach((st, i) => {
+    const row = document.createElement('div');
+    row.className = 'step';
+    row.innerHTML = `<span class="n">${i + 1}</span>
+      <div class="what"><select>${actionOptions(st)}</select>${st.kind === 'color' ? `<input type="color" value="${hex(st.color || [255, 69, 0])}">` : ''}</div>
+      <div class="dur">⏱ <input type="number" min="1" step="1" value="${st.duration}"> s</div>
+      <div class="tools row" style="gap:4px"><button data-a="up">↑</button><button data-a="down">↓</button><button data-a="del" class="danger">✕</button></div>`;
+    row.querySelector('select').onchange = e => {
+      const [kind, id] = e.target.value.split(':');
+      st.kind = kind; st.id = kind === 'wiz' ? +id : id;
+      if (kind === 'color') { delete st.id; st.color = st.color || [255, 69, 0]; }
+      renderEditor();
+    };
+    const ci = row.querySelector('input[type=color]');
+    if (ci) ci.oninput = e => st.color = hexToRgb(e.target.value);
+    row.querySelector('input[type=number]').oninput = e => { st.duration = Math.max(1, +e.target.value || 1); updateTotal(); };
+    row.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+      const a = b.dataset.a, j = a === 'up' ? i - 1 : i + 1;
+      if (a === 'del') s.steps.splice(i, 1);
+      else if (j >= 0 && j < s.steps.length) [s.steps[i], s.steps[j]] = [s.steps[j], s.steps[i]];
+      renderEditor(); renderSeqList();
+    });
+    $('#steps').appendChild(row);
+  });
+  if (!s.steps.length) $('#steps').innerHTML = '<p class="muted">Sin pasos. Agrega el primero.</p>';
+  updateTotal();
+}
+function updateTotal() {
+  const s = SEQS[cur], t = s.steps.reduce((a, b) => a + (+b.duration || 0), 0);
+  $('#total').textContent = s.steps.length ? `Duración total: ${fmt(t)}${s.loop ? ' (se repite)' : ''}` : '';
+}
+$('#seqName').oninput = e => { SEQS[cur].name = e.target.value; renderSeqList(); };
+$('#seqLoop').onchange = e => { SEQS[cur].loop = e.target.checked; updateTotal(); };
+$('#addStep').onclick = () => {
+  const s = SEQS[cur], last = s.steps[s.steps.length - 1];
+  s.steps.push(last ? { ...last } : { kind: 'scene', id: 'calabaza', duration: 60 });
+  renderEditor(); renderSeqList();
+};
+$('#newSeq').onclick = () => { SEQS.push({ name: 'Nueva secuencia', loop: true, steps: [] }); cur = SEQS.length - 1; renderSeqList(); renderEditor(); };
+$('#saveSeq').onclick = async () => {
+  try { await api('/api/sequences', { sequences: SEQS }); toast('💾 Secuencias guardadas'); } catch (e) { toast('⚠ ' + e.message); }
+};
+$('#delSeq').onclick = async () => {
+  if (!confirm(`¿Borrar "${SEQS[cur].name}"?`)) return;
+  SEQS.splice(cur, 1); cur = 0;
+  await api('/api/sequences', { sequences: SEQS }).catch(() => {});
+  renderSeqList(); renderEditor();
+};
+$('#runSeq').onclick = () => {
+  const s = SEQS[cur];
+  if (!s.steps.length) return toast('La secuencia está vacía');
+  send('/api/sequence/run', { name: s.name, steps: s.steps, loop: s.loop }).then(ok => ok && toast('▶ ' + s.name));
+};
+
+(async () => {
+  CAT = await api('/api/catalog');
+  SEQS = await api('/api/sequences');
+  CAT.bulbs.filter(b => b.room === 'Sala fiesta').forEach(b => sel.add(b.ip));
+  renderButtons(); renderSeqList(); renderEditor(); refresh();
+  setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

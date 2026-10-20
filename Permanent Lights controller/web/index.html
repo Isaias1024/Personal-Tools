@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c14">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Luces permanentes</title>
+<style>
+  :root{--bg:#0e0c14;--card:#181523;--hi:#231f33;--line:#2a2540;--fg:#ece8f5;--muted:#8d86a6;
+        --orange:#ff7a1a;--purple:#9b6bff;--green:#38d27a;--red:#e5484d}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+  main{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:20px;margin:4px 0 0;display:flex;align-items:center;gap:10px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.on{background:var(--green);box-shadow:0 0 10px var(--green)}
+  #status{color:var(--muted);font-size:13px;margin-top:-8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .row{display:flex;gap:10px}
+  button{font:inherit;color:var(--fg);border:0;border-radius:12px;padding:14px;cursor:pointer;background:var(--hi)}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.4}
+  .big{flex:1;font-weight:700;font-size:17px;padding:18px}
+  .on{background:var(--green);color:#06210f}
+  .off{background:var(--red);color:#fff}
+  .tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
+  .tabs button{flex:1;background:none;padding:10px;color:var(--muted)}
+  .tabs button.sel{background:var(--hi);color:var(--fg);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .anim{padding:14px 6px;font-size:14px;border:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .anim i{width:22px;height:22px;border-radius:50%}
+  .anim.act{border-color:var(--orange);background:#2b1d22}
+  label{display:flex;justify-content:space-between;color:var(--muted);font-size:13px;margin:6px 2px}
+  input[type=range]{width:100%;accent-color:var(--orange);height:28px}
+  #wheelWrap{position:relative;width:min(100%,280px);aspect-ratio:1;margin:4px auto 10px;touch-action:none}
+  #wheel{width:100%;height:100%;border-radius:50%}
+  #marker{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px #0008;pointer-events:none}
+  .sw{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .sw button{width:38px;height:38px;border-radius:50%;padding:0;border:2px solid var(--line)}
+  #preview{height:8px;border-radius:4px;margin-top:10px;background:#000}
+  details{color:var(--muted);font-size:12px}
+  #log{white-space:pre-wrap;max-height:160px;overflow:auto;font-family:ui-monospace,monospace;margin-top:8px}
+  .warn{background:#2b1d10;border:1px solid #5a3a12;color:#ffcf9a;border-radius:12px;padding:12px;font-size:13px}
+  .softrow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin-top:10px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1><span class="dot" id="dot"></span>Luces permanentes</h1>
+  <div id="status">Desconectado</div>
+  <div class="warn" id="nobt" hidden>Este navegador no tiene Web Bluetooth. Ábrelo en <b>Chrome para Android</b> y desde una dirección <b>https://</b>.</div>
+
+  <div class="card">
+    <div class="row">
+      <button class="big on" id="btnOn">ENCENDER</button>
+      <button class="big off" id="btnOff">APAGAR</button>
+    </div>
+    <div class="softrow"><input type="checkbox" id="soft"><label for="soft" style="margin:0">Apagado suave (color negro)</label></div>
+    <label>Brillo <span id="bv">100%</span></label>
+    <input type="range" id="bright" min="1" max="100" value="100">
+    <label>Velocidad de animación <span id="sv">1.0×</span></label>
+    <input type="range" id="speed" min="0.2" max="3" step="0.1" value="1">
+    <div id="preview"></div>
+  </div>
+
+  <div class="tabs"><button id="tH" class="sel">🎃 Halloween</button><button id="tC">🎨 Colores</button></div>
+
+  <div class="card" id="paneH"><div class="grid" id="grid"></div></div>
+
+  <div class="card" id="paneC" hidden>
+    <div id="wheelWrap"><canvas id="wheel"></canvas><div id="marker" hidden></div></div>
+    <div class="sw" id="sw"></div>
+  </div>
+
+  <details><summary>Registro</summary><div id="log"></div></details>
+</main>
+
+<script>
+"use strict";
+// ---------------- protocolo DMRRBA-007 (Nordic UART) ----------------
+const SVC = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const WR  = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const P_ON  = [0x5A,0x01,0x02,0x01];
+const P_OFF = [0x5A,0x01,0x02,0x00];
+const P_COLOR = (r,g,b)=>[0x5A,0x07,0x01,r,g,b];
+const FRAME_DT = 0.07, GAMMA = 2.0;
+
+const $ = id=>document.getElementById(id);
+const logEl=$("log");
+function log(m){ const t=new Date().toLocaleTimeString(); logEl.textContent=`${t}  ${m}\n`+logEl.textContent.slice(0,4000); }
+function status(m){ $("status").textContent=m; }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---------------- BLE ----------------
+let dev=null, chr=null, chain=Promise.resolve();
+const connected=()=>!!(dev && dev.gatt.connected && chr);
+function setConn(){ $("dot").classList.toggle("on",connected()); }
+
+async function pickDevice(){
+  dev = await navigator.bluetooth.requestDevice({
+    filters:[{namePrefix:"DMRRBA"},{namePrefix:"dmrrba"},{services:[SVC]}],
+    optionalServices:[SVC]});
+  dev.addEventListener("gattserverdisconnected",()=>{ chr=null; setConn(); status("Desconectado"); log("Desconectado"); stopAnim(); });
+  log("Elegido "+(dev.name||dev.id));
+}
+async function ensureConnected(){
+  if(connected()) return;
+  if(!dev) await pickDevice();           // debe ir antes de cualquier otro await (gesto del usuario)
+  for(let i=1;i<=3;i++){
+    try{
+      status(i>1?`Conectando… (intento ${i})`:"Conectando…");
+      const srv=await dev.gatt.connect();
+      chr=await (await srv.getPrimaryService(SVC)).getCharacteristic(WR);
+      setConn(); log("Conectado"); return;
+    }catch(e){ log("Fallo al conectar: "+e.message); if(i===3) throw e; await sleep(1500); }
+  }
+}
+function send(bytes){
+  const data=new Uint8Array(bytes);
+  chain=chain.then(()=>{
+    if(!connected()) return;
+    return chr.properties.writeWithoutResponse ? chr.writeValueWithoutResponse(data) : chr.writeValueWithResponse(data);
+  }).catch(e=>log("Error TX: "+e.message));
+  return chain;
+}
+
+// ---------------- estado ----------------
+let bright=1, speed=1, base=[255,122,26], lastSent=[255,122,26];
+let anim=null, colorPending=null, colorBusy=false, wake=null;
+
+function scaled(rgb){ return rgb.map(v=>Math.round(v*bright)); }
+function preview(rgb){ $("preview").style.background=`rgb(${rgb.map(v=>Math.min(255,v*1.0)).join(",")})`; }
+
+async function sendColor(rgb){          // el último gana, ~12 envíos/s
+  colorPending=rgb;
+  if(colorBusy) return;
+  colorBusy=true;
+  try{
+    while(colorPending){
+      const c=colorPending; colorPending=null;
+      if(!connected()){ status("Presiona ENCENDER para conectar"); break; }
+      await send(P_COLOR(...c)); lastSent=c; preview(c);
+      await sleep(80);
+    }
+  } finally { colorBusy=false; }
+}
+
+async function action(fn){
+  try{ await fn(); }catch(e){ log("ERROR: "+e.message); status(e.name==="NotFoundError"?"No elegiste dispositivo":"Error (ver registro)"); }
+}
+
+$("btnOn").onclick=()=>action(async()=>{
+  await ensureConnected();
+  await send(P_ON); await sleep(150);
+  await send(P_COLOR(...scaled(base))); preview(scaled(base));
+  status("Conectado · ON"); keepAwake(true);
+});
+$("btnOff").onclick=()=>action(async()=>{
+  stopAnim();
+  await ensureConnected();
+  if($("soft").checked){ await send(P_COLOR(0,0,0)); status("Conectado · OFF suave"); }
+  else { await send(P_OFF); status("Conectado · OFF"); }
+  preview([0,0,0]);
+});
+
+$("bright").oninput=e=>{ bright=e.target.value/100; $("bv").textContent=e.target.value+"%"; if(!anim && connected()) sendColor(scaled(base)); };
+$("speed").oninput=e=>{ speed=+e.target.value; $("sv").textContent=speed.toFixed(1)+"×"; };
+
+// ---------------- pantalla encendida mientras se usa ----------------
+async function keepAwake(on){
+  try{
+    if(on && !wake && "wakeLock" in navigator){ wake=await navigator.wakeLock.request("screen"); wake.addEventListener("release",()=>wake=null); }
+    if(!on && wake){ await wake.release(); wake=null; }
+  }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && (anim||connected())) keepAwake(true); });
+
+// ---------------- animaciones (portadas de led_ui.py) ----------------
+const cl=x=>Math.max(0,Math.min(1,x));
+const mix=(a,b,t)=>{t=cl(t);return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];};
+const sc=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
+const ease=x=>{x=cl(x);return x*x*(3-2*x);};
+const N=(t,s=0)=>0.5+0.5*(Math.sin(t+s)+Math.sin(t*2.31+s*1.7+1.3)+Math.sin(t*4.77+s*2.9+2.1))/3;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const {sin,exp,min,max,floor}=Math;
+// cada fábrica devuelve step(t, d, C): t=tiempo acumulado, d=paso, C(eventos/seg)=azar
+const A={
+  hell(){let f=0,s=0;return(t,d,C)=>{if(C(1.1))f=rnd(.6,1);if(C(.7))s=1;f*=.9;s*=.62;
+    const h=.3+.38*N(t*.9,3)+.45*f;return mix(mix(mix([.35,0,0],[1,.06,0],h*1.2),[1,.38,0],f),[1,.75,.15],s*.8);};},
+  embers(){let h=0;return(t,d,C)=>{if(C(2.2))h=rnd(.5,1);h*=.9;const sl=max(0,N(t*.8,21)-.45)*1.2,k=min(1,sl*.55+h);return[k,.05*k**3,0];};},
+  abyss(){let l=0,w=0;return(t,d)=>{w-=d;if(w<=0){l=1;w=rnd(2,5);}l*=.95;return[l**1.5,0,0];};},
+  underworld(){let s=0;return(t,d,C)=>{if(C(.5))s=1;s*=.88;let b=mix([.1,0,.4],[0,.4,.45],N(t*.45,7));b=sc(b,.35+.45*N(t*.7,1));return mix(b,[.35,1,.55],s*.85);};},
+  fire(){let g=0;return(t,d,C)=>{if(C(.8))g=rnd(.4,.9);g*=.85;let h=.55+.35*N(t*2.2)+rnd(-.08,.08)-g*.5;h=max(.12,min(1,h));return[min(1,h*1.15),.22*h**1.4+.1*h**3,0];};},
+  heartbeat(){return t=>{const p=(t/1.15)%1,b=exp(-(((p-.08)/.035)**2))+.65*exp(-(((p-.27)/.045)**2)),k=.06+.94*min(b,1);return sc(mix([.9,0,0],[1,.05,.03],k),k);};},
+  storm(){let q=[],g=0;return(t,d,C)=>{const b=sc(mix([.12,.05,.55],[.05,.18,.55],N(t*.6)),.18+.22*N(t*.9,4));
+    if(!q.length&&C(.28))q=pick([[1,0,.9,.3,0,0,1],[1,.6,0,1],[.7,0,1,0,.5,0,0,1,.4],[1]]).slice();
+    if(q.length)g=max(g,q.shift());g*=.55;return mix(b,[.85,.92,1],g);};},
+  ghost(){return t=>{const p=(t/3.2)%1;let k=p<.6?ease(p/.6):1-ease((p-.6)/.4);k=.06+.94*k*(.9+.1*N(t*5));return mix([0,.25,.12],[.55,1,.8],k**1.3);};},
+  pumpkin(){return t=>{const c=(t/7)%1,m=ease((c-.55)/.15)*(1-ease((c-.85)/.15)),f=.72+.28*N(t*3,2)+rnd(-.04,.04);return mix(sc([1,.3,0],min(1,f)),[.55,0,1],m);};},
+  potion(){let b=0;return(t,d,C)=>{if(C(1.6))b=rnd(.6,1);b*=.72;return mix(sc([.15,1,0],.4+.25*N(t*1.6,5)),[.75,1,.45],b);};},
+  witch(){const S=[[.45,0,1],[1,0,.55],[.1,1,.25]];let s=0;return(t,d,C)=>{const x=(t*.3)%3,i=floor(x),f=ease((x-i)/.6);if(C(.9))s=.9;s*=.6;return mix(mix(S[i],S[(i+1)%3],f),[1,1,1],s*.5);};},
+  coven(){const S=[[.55,0,1],[.1,1,.2],[1,.33,0]];let s=0;return(t,d,C)=>{const x=(t*.45)%3,i=floor(x),b=mix(S[i],S[(i+1)%3],ease((x-i)/.35));if(C(2))s=1;s*=.55;return mix(sc(b,.6+.4*N(t*2)),[1,1,1],s*.6);};},
+  moon(){return t=>{const c=ease((N(t*.35,9)-.55)/.2),k=(.78+.22*sin(t*.8))*(1-.75*c);return sc(mix([.55,.68,1],[.85,.9,1],k),k);};},
+  fog(){return t=>sc(mix([.12,.3,.22],[.3,.5,.62],N(t*.3,11)),.35+.45*N(t*.5,13));},
+  blood(){let l=0,w=0;return(t,d)=>{w-=d;if(w<=0){l=1;w=rnd(1.4,3.2);}l*=.93;return sc([.9,0,.01],.08+.92*l);};},
+  neon(){let p=[];return(t,d,C)=>{if(!p.length&&C(.55))p=pick([()=>[0,1,0,1,0,0,1],()=>[.2,.8,.1,.9,.3],()=>Array(ri(4,12)).fill(0).concat([1,0,1])])();
+    const v=p.length?p.shift():.92+.08*N(t*8);return sc([.15,1,.45],v);};},
+  possession(){let g=[];return(t,d,C)=>{if(!g.length&&C(.5))g=Array.from({length:ri(2,6)},()=>pick([[0,0,0],[.6,0,1],[1,1,1],[0,0,0]]));
+    if(g.length)return g.shift();return sc([1,0,.02],.25+.75*(.5+.5*sin(t*2.4))**2);};},
+  panic(){let b=0;return(t,d,C)=>{if(b===0&&C(.6))b=ri(8,24);if(b){b--;const r=Math.random();return r<.35?[0,0,0]:r<.7?[1,.28,0]:[1,0,0];}return[.1,0,0];};},
+};
+const LIST=[["hell","Infierno","#ff3b0a"],["embers","Brasas","#c01000"],["abyss","Abismo","#600008"],
+  ["underworld","Inframundo","#18c8b8"],["fire","Antorcha","#ff7a1a"],["heartbeat","Latido","#e5484d"],
+  ["storm","Tormenta","#7c6cff"],["ghost","Fantasma","#6dffb0"],["pumpkin","Calabaza","#ff8a00"],
+  ["potion","Poción","#7dff2a"],["witch","Hechizo","#c04dff"],["coven","Aquelarre","#ff5fd0"],
+  ["moon","Luna llena","#b8c8ff"],["fog","Niebla","#78a8a0"],["blood","Sangre","#b00014"],
+  ["neon","Neón roto","#3dff8a"],["possession","Posesión","#ff0030"],["panic","Pánico","#ff3d1f"]];
+
+const grid=$("grid");
+for(const [k,n,c] of LIST){
+  const b=document.createElement("button"); b.className="anim"; b.dataset.k=k;
+  b.innerHTML=`<i style="background:${c};box-shadow:0 0 10px ${c}"></i>${n}`;
+  b.onclick=()=> anim===k ? stopAnim() : action(()=>startAnim(k));
+  grid.appendChild(b);
+}
+function markAnim(){ grid.querySelectorAll(".anim").forEach(b=>b.classList.toggle("act",b.dataset.k===anim)); }
+function stopAnim(){ anim=null; markAnim(); }
+
+async function startAnim(key){
+  anim=key; markAnim();
+  await ensureConnected();
+  if(anim!==key) return;
+  await send(P_ON); await sleep(150);
+  status("Conectado · Animación"); keepAwake(true); log("Animación: "+key);
+  const step=A[key](); let t=0;
+  while(anim===key){
+    const t0=performance.now(), d=FRAME_DT*speed;
+    t+=d;
+    const c=step(t,d,p=>Math.random()<p*d);
+    let rgb=c.map(v=>Math.max(0,Math.min(255,Math.round(cl(v)**GAMMA*bright*255))));
+    if(!rgb.some(Boolean)) rgb=(c[0]>0||c[1]+c[2]===0)?[1,0,0]:[0,0,1]; // algunos controladores ignoran (0,0,0)
+    if(!connected()){ log("Conexión perdida; animación detenida."); stopAnim(); return; }
+    await send(P_COLOR(...rgb)); lastSent=rgb; preview(rgb.map(v=>v*1));
+    await sleep(Math.max(0,FRAME_DT*1000-(performance.now()-t0)));
+  }
+}
+
+// ---------------- rueda de color ----------------
+const cv=$("wheel"), mk=$("marker");
+function drawWheel(){
+  const s=Math.round(cv.clientWidth*(devicePixelRatio||1)); cv.width=cv.height=s;
+  const ctx=cv.getContext("2d"), img=ctx.createImageData(s,s), R=s/2;
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    const dx=x-R,dy=y-R,r=Math.hypot(dx,dy)/R,i=(y*s+x)*4; if(r>1){img.data[i+3]=0;continue;}
+    const [cr,cg,cb]=hsv((Math.atan2(dy,dx)/(2*Math.PI)+1)%1,r,1);
+    img.data[i]=cr;img.data[i+1]=cg;img.data[i+2]=cb;img.data[i+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+function hsv(h,s,v){const i=floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+  const [r,g,b]=[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6];return[r,g,b].map(x=>Math.round(x*255));}
+function onWheel(e){
+  const rc=cv.getBoundingClientRect(),R=rc.width/2,dx=e.clientX-rc.left-R,dy=e.clientY-rc.top-R;
+  const r=min(1,Math.hypot(dx,dy)/R),a=Math.atan2(dy,dx);
+  mk.hidden=false; mk.style.left=(R+Math.cos(a)*r*R)+"px"; mk.style.top=(R+Math.sin(a)*r*R)+"px";
+  base=hsv((a/(2*Math.PI)+1)%1,r,1); mk.style.background=`rgb(${base})`;
+  stopAnim(); sendColor(scaled(base));
+}
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);onWheel(e);});
+cv.addEventListener("pointermove",e=>{if(e.buttons)onWheel(e);});
+const SW=[[255,122,26],[255,0,0],[155,0,255],[0,255,60],[255,0,140],[0,90,255],[255,180,90],[255,255,255]];
+for(const c of SW){const b=document.createElement("button");b.style.background=`rgb(${c})`;
+  b.onclick=()=>{base=c;mk.hidden=true;stopAnim();sendColor(scaled(base));};$("sw").appendChild(b);}
+
+// ---------------- pestañas ----------------
+function tab(h){ $("tH").classList.toggle("sel",h); $("tC").classList.toggle("sel",!h);
+  $("paneH").hidden=!h; $("paneC").hidden=h; if(!h && !cv.width) drawWheel(); }
+$("tH").onclick=()=>tab(true); $("tC").onclick=()=>tab(false);
+
+// ---------------- arranque ----------------
+if(!navigator.bluetooth){ $("nobt").hidden=false; document.querySelectorAll("button").forEach(b=>b.disabled=true); }
+else if(navigator.bluetooth.getDevices){   // reconecta sin volver a elegir (si Chrome lo permite)
+  navigator.bluetooth.getDevices().then(ds=>{ const d=ds.find(x=>/dmrrba/i.test(x.name||"")); if(d){ dev=d;
+    dev.addEventListener("gattserverdisconnected",()=>{chr=null;setConn();status("Desconectado");stopAnim();}); log("Dispositivo recordado: "+d.name);} }).catch(()=>{});
+}
+preview(base);
+</script>
+</body>
+</html>
